@@ -1,0 +1,506 @@
+-- ==========================================
+-- EVIL THE J & BALDI V4.5 Full & Final Edition
+-- ==========================================
+
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local TweenService = game:GetService("TweenService")
+local UserInputService = game:GetService("UserInputService")
+local Workspace = game:GetService("Workspace")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+
+local LocalPlayer = Players.LocalPlayer
+
+-- 0. Cleanup เก่า & อัปเดต Session Token (ป้องกัน Memory/CPU Leak)
+_G.EvilSessionToken = (_G.EvilSessionToken or 0) + 1
+local currentSession = _G.EvilSessionToken
+
+if _G.EvilBaldiConnections then
+    for _, conn in pairs(_G.EvilBaldiConnections) do
+        if typeof(conn) == "RBXScriptConnection" then
+            conn:Disconnect()
+        end
+    end
+end
+_G.EvilBaldiConnections = {}
+
+if LocalPlayer.PlayerGui:FindFirstChild("EvilBaldiV4_3") then
+    LocalPlayer.PlayerGui.EvilBaldiV4_3:Destroy()
+end
+if LocalPlayer.PlayerGui:FindFirstChild("EvilBaldiLoading") then
+    LocalPlayer.PlayerGui.EvilBaldiLoading:Destroy()
+end
+
+-- State Variables (ใช้ noclip ตัวเดียวตามที่ตกลง)
+local flying = false
+local noclip = false
+local healthLockBaldi = false
+local healthLockTheJ = false
+local speedBaldiState = false
+local speedTheJState = false
+local jumpTheJState = false
+
+local freezeBaldiState = false
+local auraKillState = false
+local espBaldiState = false
+local espPlaytimeState = false
+
+local mobileFlyUp = false
+local mobileFlyDown = false
+local mobileFlyForward = false
+
+local bodyVel, bodyGyro
+local originalCanCollide = {}
+local originalWalkSpeed = 16
+local originalJumpPower = 50
+
+-- ฟังก์ชันเก็บ Connection เพื่อ Cleanup อัตโนมัติ
+local function addConn(conn)
+    table.insert(_G.EvilBaldiConnections, conn)
+    return conn
+end
+
+-- โหลดค่าเดิมตามตัวละครจริง
+local function updateOriginalStats(char)
+    local hum = char:FindFirstChildOfClass("Humanoid")
+    if hum then
+        originalWalkSpeed = hum.WalkSpeed
+        originalJumpPower = hum.JumpPower
+    end
+end
+
+if LocalPlayer.Character then
+    updateOriginalStats(LocalPlayer.Character)
+end
+
+-- 1. Loading Screen
+local function showLoadingScreen()
+    local sg = Instance.new("ScreenGui")
+    sg.Name = "EvilBaldiLoading"
+    sg.Parent = LocalPlayer:WaitForChild("PlayerGui")
+    sg.IgnoreGuiInset = true
+
+    local bg = Instance.new("Frame")
+    bg.Size = UDim2.new(1, 0, 1, 0)
+    bg.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
+    bg.Parent = sg
+
+    local label = Instance.new("TextLabel")
+    label.Size = UDim2.new(0, 400, 0, 60)
+    label.Position = UDim2.new(0.5, -200, 0.5, -30)
+    label.BackgroundTransparency = 1
+    label.Text = "⚡ EVIL THE J & BALDI V4.5 ⚡\nOptimizing & Loading..."
+    label.TextColor3 = Color3.fromRGB(255, 255, 255)
+    label.TextSize = 18
+    label.Font = Enum.Font.GothamBold
+    label.Parent = bg
+
+    task.wait(0.8)
+    TweenService:Create(bg, TweenInfo.new(0.3), {BackgroundTransparency = 1}):Play()
+    TweenService:Create(label, TweenInfo.new(0.3), {TextTransparency = 1}):Play()
+    task.wait(0.3)
+    sg:Destroy()
+end
+
+showLoadingScreen()
+
+-- 2. Main GUI Setup
+local ScreenGui = Instance.new("ScreenGui")
+ScreenGui.Name = "EvilBaldiV4_3"
+ScreenGui.ResetOnSpawn = false
+ScreenGui.Parent = LocalPlayer:WaitForChild("PlayerGui")
+
+local ToggleBtn = Instance.new("TextButton")
+ToggleBtn.Name = "ToggleBtn"
+ToggleBtn.Size = UDim2.new(0, 50, 0, 50)
+ToggleBtn.Position = UDim2.new(0, 20, 0.5, -25)
+ToggleBtn.BackgroundColor3 = Color3.fromRGB(35, 35, 35)
+ToggleBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+ToggleBtn.Text = "⚡"
+ToggleBtn.TextSize = 24
+ToggleBtn.Font = Enum.Font.GothamBold
+ToggleBtn.Parent = ScreenGui
+Instance.new("UICorner", ToggleBtn).CornerRadius = UDim.new(0, 12)
+
+local MainWindow = Instance.new("Frame")
+MainWindow.Name = "MainWindow"
+MainWindow.Size = UDim2.new(0, 440, 0, 390)
+MainWindow.Position = UDim2.new(0.5, -220, 0.5, -195)
+MainWindow.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
+MainWindow.Visible = false
+MainWindow.Parent = ScreenGui
+Instance.new("UICorner", MainWindow).CornerRadius = UDim.new(0, 10)
+
+local TitleBar = Instance.new("TextLabel")
+TitleBar.Size = UDim2.new(1, 0, 0, 40)
+TitleBar.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+TitleBar.Text = "  ⚡ EVIL THE J & BALDI V4.5 Pro"
+TitleBar.TextColor3 = Color3.fromRGB(255, 255, 255)
+TitleBar.TextSize = 14
+TitleBar.Font = Enum.Font.GothamBold
+TitleBar.TextXAlignment = Enum.TextXAlignment.Left
+TitleBar.Parent = MainWindow
+Instance.new("UICorner", TitleBar).CornerRadius = UDim.new(0, 10)
+
+local TabFrame = Instance.new("Frame")
+TabFrame.Size = UDim2.new(1, -20, 0, 35)
+TabFrame.Position = UDim2.new(0, 10, 0, 48)
+TabFrame.BackgroundTransparency = 1
+TabFrame.Parent = MainWindow
+
+local BaldiTabBtn = Instance.new("TextButton")
+BaldiTabBtn.Size = UDim2.new(0.33, -3, 1, 0)
+BaldiTabBtn.BackgroundColor3 = Color3.fromRGB(55, 55, 55)
+BaldiTabBtn.Text = "📏 Baldi"
+BaldiTabBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+BaldiTabBtn.Font = Enum.Font.GothamBold
+BaldiTabBtn.TextSize = 13
+BaldiTabBtn.Parent = TabFrame
+Instance.new("UICorner", BaldiTabBtn).CornerRadius = UDim.new(0, 6)
+
+local TheJTabBtn = Instance.new("TextButton")
+TheJTabBtn.Size = UDim2.new(0.33, -3, 1, 0)
+TheJTabBtn.Position = UDim2.new(0.33, 4, 0, 0)
+TheJTabBtn.BackgroundColor3 = Color3.fromRGB(35, 35, 35)
+TheJTabBtn.Text = "⚡ The J"
+TheJTabBtn.TextColor3 = Color3.fromRGB(180, 180, 180)
+TheJTabBtn.Font = Enum.Font.GothamBold
+TheJTabBtn.TextSize = 13
+TheJTabBtn.Parent = TabFrame
+Instance.new("UICorner", TheJTabBtn).CornerRadius = UDim.new(0, 6)
+
+local ExtraTabBtn = Instance.new("TextButton")
+ExtraTabBtn.Size = UDim2.new(0.33, -3, 1, 0)
+ExtraTabBtn.Position = UDim2.new(0.66, 8, 0, 0)
+ExtraTabBtn.BackgroundColor3 = Color3.fromRGB(35, 35, 35)
+ExtraTabBtn.Text = "🌍 Extra & ESP"
+ExtraTabBtn.TextColor3 = Color3.fromRGB(180, 180, 180)
+ExtraTabBtn.Font = Enum.Font.GothamBold
+ExtraTabBtn.TextSize = 13
+ExtraTabBtn.Parent = TabFrame
+Instance.new("UICorner", ExtraTabBtn).CornerRadius = UDim.new(0, 6)
+
+local BaldiContent = Instance.new("ScrollingFrame")
+BaldiContent.Size = UDim2.new(1, -20, 1, -95)
+BaldiContent.Position = UDim2.new(0, 10, 0, 90)
+BaldiContent.BackgroundTransparency = 1
+BaldiContent.CanvasSize = UDim2.new(0, 0, 0, 540)
+BaldiContent.ScrollBarThickness = 4
+BaldiContent.Parent = MainWindow
+
+local TheJContent = Instance.new("ScrollingFrame")
+TheJContent.Size = UDim2.new(1, -20, 1, -95)
+TheJContent.Position = UDim2.new(0, 10, 0, 90)
+TheJContent.BackgroundTransparency = 1
+TheJContent.CanvasSize = UDim2.new(0, 0, 0, 260)
+TheJContent.ScrollBarThickness = 4
+TheJContent.Visible = false
+TheJContent.Parent = MainWindow
+
+local ExtraContent = Instance.new("ScrollingFrame")
+ExtraContent.Size = UDim2.new(1, -20, 1, -95)
+ExtraContent.Position = UDim2.new(0, 10, 0, 90)
+ExtraContent.BackgroundTransparency = 1
+ExtraContent.CanvasSize = UDim2.new(0, 0, 0, 300)
+ExtraContent.ScrollBarThickness = 4
+ExtraContent.Visible = false
+ExtraContent.Parent = MainWindow
+
+-- Tab Button Connections
+addConn(BaldiTabBtn.MouseButton1Click:Connect(function()
+    BaldiContent.Visible = true; TheJContent.Visible = false; ExtraContent.Visible = false
+    BaldiTabBtn.BackgroundColor3 = Color3.fromRGB(55, 55, 55); BaldiTabBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+    TheJTabBtn.BackgroundColor3 = Color3.fromRGB(35, 35, 35); TheJTabBtn.TextColor3 = Color3.fromRGB(180, 180, 180)
+    ExtraTabBtn.BackgroundColor3 = Color3.fromRGB(35, 35, 35); ExtraTabBtn.TextColor3 = Color3.fromRGB(180, 180, 180)
+end))
+
+addConn(TheJTabBtn.MouseButton1Click:Connect(function()
+    BaldiContent.Visible = false; TheJContent.Visible = true; ExtraContent.Visible = false
+    BaldiTabBtn.BackgroundColor3 = Color3.fromRGB(35, 35, 35); BaldiTabBtn.TextColor3 = Color3.fromRGB(180, 180, 180)
+    TheJTabBtn.BackgroundColor3 = Color3.fromRGB(55, 55, 55); TheJTabBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+    ExtraTabBtn.BackgroundColor3 = Color3.fromRGB(35, 35, 35); ExtraTabBtn.TextColor3 = Color3.fromRGB(180, 180, 180)
+end))
+
+addConn(ExtraTabBtn.MouseButton1Click:Connect(function()
+    BaldiContent.Visible = false; TheJContent.Visible = false; ExtraContent.Visible = true
+    BaldiTabBtn.BackgroundColor3 = Color3.fromRGB(35, 35, 35); BaldiTabBtn.TextColor3 = Color3.fromRGB(180, 180, 180)
+    TheJTabBtn.BackgroundColor3 = Color3.fromRGB(35, 35, 35); TheJTabBtn.TextColor3 = Color3.fromRGB(180, 180, 180)
+    ExtraTabBtn.BackgroundColor3 = Color3.fromRGB(55, 55, 55); ExtraTabBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+end))
+
+addConn(ToggleBtn.MouseButton1Click:Connect(function()
+    MainWindow.Visible = not MainWindow.Visible
+end))
+
+local function createButton(parent, text, yPos, callback)
+    local btn = Instance.new("TextButton")
+    btn.Size = UDim2.new(1, 0, 0, 36)
+    btn.Position = UDim2.new(0, 0, 0, yPos)
+    btn.BackgroundColor3 = Color3.fromRGB(45, 45, 45)
+    btn.TextColor3 = Color3.fromRGB(255, 255, 255)
+    btn.Text = text
+    btn.Font = Enum.Font.Gotham
+    btn.TextSize = 13
+    btn.Parent = parent
+    Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 6)
+    addConn(btn.MouseButton1Click:Connect(function()
+        callback(btn)
+    end))
+    return btn
+end
+
+-- ==========================================
+-- 3. Core Engine & Safe Session Loop
+-- ==========================================
+
+-- Fly Engine
+addConn(RunService.RenderStepped:Connect(function()
+    local currentCam = Workspace.CurrentCamera
+    if flying and currentCam then
+        local char = LocalPlayer.Character
+        if char and char:FindFirstChild("HumanoidRootPart") then
+            local root = char.HumanoidRootPart
+            if not bodyVel or not bodyVel.Parent then
+                bodyVel = Instance.new("BodyVelocity")
+                bodyVel.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
+                bodyVel.Parent = root
+            end
+            if not bodyGyro or not bodyGyro.Parent then
+                bodyGyro = Instance.new("BodyGyro")
+                bodyGyro.MaxTorque = Vector3.new(math.huge, math.huge, math.huge)
+                bodyGyro.Parent = root
+            end
+
+            bodyGyro.CFrame = CFrame.new(root.Position, root.Position + currentCam.CFrame.LookVector)
+            
+            local moveDir = Vector3.new()
+            if UserInputService:IsKeyDown(Enum.KeyCode.W) then moveDir = moveDir + currentCam.CFrame.LookVector end
+            if UserInputService:IsKeyDown(Enum.KeyCode.S) then moveDir = moveDir - currentCam.CFrame.LookVector end
+            if UserInputService:IsKeyDown(Enum.KeyCode.A) then moveDir = moveDir - currentCam.CFrame.RightVector end
+            if UserInputService:IsKeyDown(Enum.KeyCode.D) then moveDir = moveDir + currentCam.CFrame.RightVector end
+            
+            if mobileFlyUp then moveDir = moveDir + Vector3.new(0, 1, 0) end
+            if mobileFlyDown then moveDir = moveDir - Vector3.new(0, 1, 0) end
+            if mobileFlyForward then moveDir = moveDir + currentCam.CFrame.LookVector end
+
+            bodyVel.Velocity = moveDir * 50
+        end
+    else
+        if bodyVel then bodyVel:Destroy() bodyVel = nil end
+        if bodyGyro then bodyGyro:Destroy() bodyGyro = nil end
+    end
+end))
+
+-- Noclip Engine
+addConn(RunService.Stepped:Connect(function()
+    local char = LocalPlayer.Character
+    if char then
+        if noclip then
+            for _, part in pairs(char:GetDescendants()) do
+                if part:IsA("BasePart") then
+                    if originalCanCollide[part] == nil then
+                        originalCanCollide[part] = part.CanCollide
+                    end
+                    part.CanCollide = false
+                end
+            end
+        else
+            for part, canCollideState in pairs(originalCanCollide) do
+                if part and part.Parent then
+                    part.CanCollide = canCollideState
+                end
+            end
+            originalCanCollide = {}
+        end
+    end
+end))
+
+-- Lightweight Heartbeat
+addConn(RunService.Heartbeat:Connect(function()
+    local char = LocalPlayer.Character
+    if char then
+        local hum = char:FindFirstChildOfClass("Humanoid")
+        if hum then
+            if healthLockBaldi or healthLockTheJ then
+                hum.Health = hum.MaxHealth
+            end
+            if speedBaldiState then
+                hum.WalkSpeed = 45
+            elseif speedTheJState then
+                hum.WalkSpeed = 50
+            end
+            if jumpTheJState then
+                hum.JumpPower = 100
+            end
+        end
+    end
+end))
+
+-- Throttled Background Task
+task.spawn(function()
+    while _G.EvilSessionToken == currentSession do
+        task.wait(0.3)
+        
+        local char = LocalPlayer.Character
+        local root = char and char:FindFirstChild("HumanoidRootPart")
+
+        -- 1. Aura Kill
+        if auraKillState and root then
+            for _, model in pairs(Workspace:GetDescendants()) do
+                if model:IsA("Model") and model ~= char then
+                    local enemyHum = model:FindFirstChildOfClass("Humanoid")
+                    local enemyRoot = model:FindFirstChild("HumanoidRootPart")
+                    if enemyHum and enemyRoot and enemyHum.Health > 0 then
+                        if (enemyRoot.Position - root.Position).Magnitude < 25 then
+                            enemyHum.Health = 0
+                        end
+                    end
+                end
+            end
+        end
+
+        -- 2. Freeze Baldi
+        for _, obj in pairs(Workspace:GetDescendants()) do
+            if obj.Name:lower():find("baldi") and obj:IsA("Model") then
+                for _, part in pairs(obj:GetDescendants()) do
+                    if part:IsA("BasePart") then
+                        part.Anchored = freezeBaldiState
+                    end
+                end
+            end
+        end
+
+        -- 3. ESP Baldi & Playtime
+        for _, obj in pairs(Workspace:GetDescendants()) do
+            if obj:IsA("Model") then
+                local nameLower = obj.Name:lower()
+                
+                if espBaldiState and nameLower:find("baldi") then
+                    if not obj:FindFirstChild("BaldiESP") then
+                        local hl = Instance.new("Highlight")
+                        hl.Name = "BaldiESP"
+                        hl.FillColor = Color3.fromRGB(255, 0, 0)
+                        hl.OutlineColor = Color3.fromRGB(255, 255, 255)
+                        hl.Parent = obj
+                    end
+                elseif not espBaldiState and obj:FindFirstChild("BaldiESP") then
+                    obj.BaldiESP:Destroy()
+                end
+
+                if espPlaytimeState and (nameLower:find("playtime") or nameLower:find("play_time")) then
+                    if not obj:FindFirstChild("PlaytimeESP") then
+                        local hl = Instance.new("Highlight")
+                        hl.Name = "PlaytimeESP"
+                        hl.FillColor = Color3.fromRGB(255, 165, 0)
+                        hl.OutlineColor = Color3.fromRGB(255, 255, 255)
+                        hl.Parent = obj
+                    end
+                elseif not espPlaytimeState and obj:FindFirstChild("PlaytimeESP") then
+                    obj.PlaytimeESP:Destroy()
+                end
+            end
+        end
+    end
+end)
+
+-- ==========================================
+-- 📏 ฟังก์ชันแท็บ BALDI
+-- ==========================================
+
+createButton(BaldiContent, "✈️ Toggle Fly (บินได้)", 0, function(btn)
+    flying = not flying
+    btn.BackgroundColor3 = flying and Color3.fromRGB(0, 170, 0) or Color3.fromRGB(45, 45, 45)
+end)
+
+local MobileFlyFrame = Instance.new("Frame")
+MobileFlyFrame.Size = UDim2.new(1, 0, 0, 36)
+MobileFlyFrame.Position = UDim2.new(0, 0, 0, 44)
+MobileFlyFrame.BackgroundTransparency = 1
+MobileFlyFrame.Parent = BaldiContent
+
+local FlyUpBtn = Instance.new("TextButton")
+FlyUpBtn.Size = UDim2.new(0.32, 0, 1, 0)
+FlyUpBtn.BackgroundColor3 = Color3.fromRGB(55, 55, 55)
+FlyUpBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+FlyUpBtn.Text = "⬆️ ขึ้น"
+FlyUpBtn.Font = Enum.Font.Gotham; FlyUpBtn.TextSize = 12; FlyUpBtn.Parent = MobileFlyFrame
+Instance.new("UICorner", FlyUpBtn).CornerRadius = UDim.new(0, 6)
+addConn(FlyUpBtn.MouseButton1Down:Connect(function() mobileFlyUp = true end))
+addConn(FlyUpBtn.MouseButton1Up:Connect(function() mobileFlyUp = false end))
+
+local FlyDownBtn = Instance.new("TextButton")
+FlyDownBtn.Size = UDim2.new(0.32, 0, 1, 0)
+FlyDownBtn.Position = UDim2.new(0.34, 0, 0, 0)
+FlyDownBtn.BackgroundColor3 = Color3.fromRGB(55, 55, 55)
+FlyDownBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+FlyDownBtn.Text = "⬇️ ลง"
+FlyDownBtn.Font = Enum.Font.Gotham; FlyDownBtn.TextSize = 12; FlyDownBtn.Parent = MobileFlyFrame
+Instance.new("UICorner", FlyDownBtn).CornerRadius = UDim.new(0, 6)
+addConn(FlyDownBtn.MouseButton1Down:Connect(function() mobileFlyDown = true end))
+addConn(FlyDownBtn.MouseButton1Up:Connect(function() mobileFlyDown = false end))
+
+local FlyFwdBtn = Instance.new("TextButton")
+FlyFwdBtn.Size = UDim2.new(0.32, 0, 1, 0)
+FlyFwdBtn.Position = UDim2.new(0.68, 0, 0, 0)
+FlyFwdBtn.BackgroundColor3 = Color3.fromRGB(55, 55, 55)
+FlyFwdBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+FlyFwdBtn.Text = "✈️ เดินหน้า"
+FlyFwdBtn.Font = Enum.Font.Gotham; FlyFwdBtn.TextSize = 11; FlyFwdBtn.Parent = MobileFlyFrame
+Instance.new("UICorner", FlyFwdBtn).CornerRadius = UDim.new(0, 6)
+addConn(FlyFwdBtn.MouseButton1Click:Connect(function()
+    mobileFlyForward = not mobileFlyForward
+    FlyFwdBtn.BackgroundColor3 = mobileFlyForward and Color3.fromRGB(0, 170, 0) or Color3.fromRGB(55, 55, 55)
+end))
+
+createButton(BaldiContent, "🏃 Speed (ความเร็ว 45)", 88, function(btn)
+    speedBaldiState = not speedBaldiState
+    if speedBaldiState then speedTheJState = false end
+    btn.BackgroundColor3 = speedBaldiState and Color3.fromRGB(0, 170, 0) or Color3.fromRGB(45, 45, 45)
+end)
+
+createButton(BaldiContent, "🛡️ Auto Heal (เติมเลือดอัตโนมัติ)", 132, function(btn)
+    healthLockBaldi = not healthLockBaldi
+    btn.BackgroundColor3 = healthLockBaldi and Color3.fromRGB(0, 170, 0) or Color3.fromRGB(45, 45, 45)
+end)
+
+createButton(BaldiContent, "👻 Noclip (เดินทะลุกำแพง)", 176, function(btn)
+    noclip = not noclip
+    btn.BackgroundColor3 = noclip and Color3.fromRGB(0, 170, 0) or Color3.fromRGB(45, 45, 45)
+end)
+
+createButton(BaldiContent, "🗑️ ลบ Baldi (Delete NPC)", 220, function()
+    for _, obj in pairs(Workspace:GetDescendants()) do
+        if obj.Name:lower():find("baldi") and (obj:IsA("Model") or obj:IsA("BasePart")) then
+            obj:Destroy()
+        end
+    end
+end)
+
+createButton(BaldiContent, "❄️ Freeze Baldi (แช่แข็ง Baldi)", 264, function(btn)
+    freezeBaldiState = not freezeBaldiState
+    btn.BackgroundColor3 = freezeBaldiState and Color3.fromRGB(0, 170, 0) or Color3.fromRGB(45, 45, 45)
+end)
+
+createButton(BaldiContent, "🎯 Bring Baldi (ดึง Baldi มาหาเรา)", 308, function()
+    local char = LocalPlayer.Character
+    if not char or not char:FindFirstChild("HumanoidRootPart") then return end
+    for _, obj in pairs(Workspace:GetDescendants()) do
+        if obj.Name:lower():find("baldi") and obj:IsA("Model") then
+            local hrp = obj:FindFirstChild("HumanoidRootPart") or obj:FindFirstChild("Head")
+            if hrp and hrp:IsA("BasePart") then
+                hrp.CFrame = char.HumanoidRootPart.CFrame + Vector3.new(0, 3, 3)
+            end
+        end
+    end
+end)
+
+createButton(BaldiContent, "📚 Bring All Notebooks (ดึงสมุดทั้งหมด)", 352, function()
+    local char = LocalPlayer.Character
+    if not char or not char:FindFirstChild("HumanoidRootPart") then return end
+    local root = char.HumanoidRootPart
+    for _, obj in pairs(Workspace:GetDescendants()) do
+        if obj.Name:lower():find("notebook") then
+            if obj:IsA("BasePart") then
+                obj.CFrame = root.CFrame + Vector3.new(0, 3, 0)
+            end
+            local prompt = obj:FindFirstChildWhichIsA(
